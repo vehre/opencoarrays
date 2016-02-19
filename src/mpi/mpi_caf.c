@@ -88,6 +88,10 @@ caf_static_t *caf_tot = NULL;
 static int *img_status = NULL;
 MPI_Win *stat_tok;
 
+/* Events variables */
+static int ev_tag = 101;
+static int ev_buf[2];
+static ev_struct **ev_list = NULL;
 /* Active messages variables */
 
 char **buff_am;
@@ -393,9 +397,10 @@ PREFIX (init) (int *argc, char ***argv)
 #endif // MPI_VERSION
       *img_status = 0;
     }
-  /* MPI_Barrier(CAF_COMM_WORLD); */
-}
 
+  /* Events init */
+  /* MPI_Irecv(ev_buf,2,MPI_INT,MPI_ANY_SOURCE,ev_tag,CAF_COMM_WORLD,&ev_req); */
+}
 
 /* Finalize coarray program.   */
 
@@ -476,7 +481,8 @@ void *
   /* int ierr; */
   void *mem;
   size_t actual_size;
-  int l_var=0, *init_array=NULL;
+  static int ev_id = 0;
+  int l_var=0, *init_array=NULL, tmp_ev_id;
 
   if (unlikely (caf_is_finalized))
     goto error;
@@ -504,6 +510,27 @@ void *
     }
   else
     actual_size = size;
+
+  if(type == CAF_REGTYPE_EVENT_STATIC
+     || type == CAF_REGTYPE_EVENT_ALLOC)
+    {
+      free(*token);
+      *token = calloc(1,sizeof(ev_struct));
+      struct ev_struct *ev_struct_tmp = *token;
+      mem = calloc(size,sizeof(int));
+      if(caf_this_image == 1)
+	{
+	  tmp_ev_id = ev_id;
+	  ev_id++;
+	}
+      MPI_Bcast(&tmp_ev_id,1,MPI_INT,0,CAF_COMM_WORLD);
+      ev_list = realloc(ev_list,(tmp_ev_id+1)*sizeof(ev_struct *));
+      ev_struct_tmp->ev_id = tmp_ev_id;
+      ev_struct_tmp->base  = mem;
+      ev_struct_tmp->len   = size;
+      ev_list[tmp_ev_id] = ev_struct_tmp;
+      return mem;
+    }
 
 #if MPI_VERSION >= 3
   MPI_Win_allocate(actual_size, 1, mpi_info_same_size, CAF_COMM_WORLD, &mem, *token);
@@ -2338,32 +2365,42 @@ PREFIX (event_post) (caf_token_t token, size_t index,
 		     int image_index, int *stat,
 		     char *errmsg, int errmsg_len)
 {
-  int image, value=1, ierr=0;
-  MPI_Win *p = token;
+  int image, ev_id=1, ierr=0;
+  int buf[2], *var;
+  ev_struct *p = token;
   const char msg[] = "Error on event post";
-
-  if(image_index == 0)
-    image = caf_this_image-1;
-  else
-    image = image_index-1;
 
   if(stat != NULL)
     *stat = 0;
 
-  #if MPI_VERSION >= 3
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
-  ierr = MPI_Accumulate (&value, 1, MPI_INT, image, index*sizeof(int), 1, MPI_INT, MPI_SUM, *p);
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_unlock (image, *p);
-# else // CAF_MPI_LOCK_UNLOCK
-  MPI_Win_flush (image, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
-#else // MPI_VERSION
-  #warning Events for MPI-2 are not implemented
-  printf ("Events for MPI-2 are not supported, please update your MPI implementation\n");
-#endif // MPI_VERSION
+  buf[0] = p->ev_id;
+  buf[1] = index;
+
+  if(image_index == 0)
+    {
+      image = caf_this_image-1;
+      var   = (int *)p->base;
+      var[index]++;
+    }
+  else
+    {
+      image = image_index-1;
+      ierr = MPI_Send(buf,2,MPI_INT,image,ev_tag,CAF_COMM_WORLD);
+    }
+/*   #if MPI_VERSION >= 3 */
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
+/*   ierr = MPI_Accumulate (&value, 1, MPI_INT, image, index*sizeof(int), 1, MPI_INT, MPI_SUM, *p); */
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_unlock (image, *p); */
+/* # else // CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_flush (image, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
+/* #else // MPI_VERSION */
+/*   #warning Events for MPI-2 are not implemented */
+/*   printf ("Events for MPI-2 are not supported, please update your MPI implementation\n"); */
+/* #endif // MPI_VERSION */
   if(ierr != MPI_SUCCESS)
     {
       if(stat != NULL)
@@ -2382,48 +2419,65 @@ PREFIX (event_wait) (caf_token_t token, size_t index,
 		     char *errmsg, int errmsg_len)
 {
   int ierr=0,count=0,i,image=caf_this_image-1;
-  int *var=NULL,flag,old=0;
-  int newval=0;
-  const int spin_loop_max = 20000;
-  MPI_Win *p = token;
+  int *var=NULL,flag=0,*tmp_var=NULL;
+  MPI_Status status;
+  ev_struct *p = token;
   const char msg[] = "Error on event wait";
 
   if(stat != NULL)
     *stat = 0;
 
-  MPI_Win_get_attr(*p,MPI_WIN_BASE,&var,&flag);
+  var = (int *) p->base;
 
-  for(i = 0; i < spin_loop_max; ++i)
+  while(var[index] < until_count)
     {
-      MPI_Win_sync(*p);
-      count = var[index];
-      if(count >= until_count)
-	break;
+      ierr = MPI_Recv(ev_buf,2,MPI_INT,MPI_ANY_SOURCE,ev_tag,CAF_COMM_WORLD,&status);
+      if(ev_buf[0] == p->ev_id)
+	{
+	  var[ev_buf[1]]++;
+	}
+      else
+	{
+	  tmp_var = (int*)ev_list[ev_buf[0]]->base;
+	  tmp_var[index]++;
+	}
     }
+  
+  var[index]-=until_count;
 
-  i=1;
-  while(count < until_count)
-    /* for(i = 0; i < spin_loop_max; ++i) */
-      {
-	MPI_Win_sync(*p);
-	count = var[index];
-	/* if(count >= until_count) */
-	/*   break; */
-	usleep(5*i);
-	i++;
-      }
+/*   MPI_Win_get_attr(*p,MPI_WIN_BASE,&var,&flag); */
 
-  newval = -until_count;
+/*   for(i = 0; i < spin_loop_max; ++i) */
+/*     { */
+/*       MPI_Win_sync(*p); */
+/*       count = var[index]; */
+/*       if(count >= until_count) */
+/* 	break; */
+/*     } */
 
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
-  ierr = MPI_Fetch_and_op(&newval, &old, MPI_INT, image, index*sizeof(int), MPI_SUM, *p);
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_unlock (image, *p);
-# else // CAF_MPI_LOCK_UNLOCK
-  MPI_Win_flush (image, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
+/*   i=1; */
+/*   while(count < until_count) */
+/*     /\* for(i = 0; i < spin_loop_max; ++i) *\/ */
+/*       { */
+/* 	MPI_Win_sync(*p); */
+/* 	count = var[index]; */
+/* 	/\* if(count >= until_count) *\/ */
+/* 	/\*   break; *\/ */
+/* 	usleep(5*i); */
+/* 	i++; */
+/*       } */
+
+/*   newval = -until_count; */
+
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
+/*   ierr = MPI_Fetch_and_op(&newval, &old, MPI_INT, image, index*sizeof(int), MPI_SUM, *p); */
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_unlock (image, *p); */
+/* # else // CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_flush (image, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
   if(ierr != MPI_SUCCESS)
     {
       if(stat != NULL)

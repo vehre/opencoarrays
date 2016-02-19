@@ -75,6 +75,17 @@ caf_register_t;
 
 typedef void* caf_token_t;
 
+/* Event structure */
+
+typedef struct ev_struct {
+  long ev_id;
+  void *base;
+  size_t len;
+  /* /\* Used by LIBCAF_MPI *\/ */
+  /* void *req; */
+  /* int  *buf; */
+}
+ev_struct;
 
 /* Linked list of static coarrays registered.  */
 typedef struct caf_static_t {
