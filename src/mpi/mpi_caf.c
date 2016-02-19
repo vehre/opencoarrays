@@ -2376,7 +2376,7 @@ PREFIX (event_post) (caf_token_t token, size_t index,
   buf[0] = p->ev_id;
   buf[1] = index;
 
-  if(image_index == 0)
+  if(image_index == 0 || image_index == caf_this_image)
     {
       image = caf_this_image-1;
       var   = (int *)p->base;
