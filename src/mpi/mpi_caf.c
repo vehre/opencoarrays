@@ -518,6 +518,7 @@ void *
       *token = calloc(1,sizeof(ev_struct));
       struct ev_struct *ev_struct_tmp = *token;
       mem = calloc(size,sizeof(int));
+      //printf("size:%d\n",size);
       if(caf_this_image == 1)
 	{
 	  tmp_ev_id = ev_id;
@@ -2374,7 +2375,7 @@ PREFIX (event_post) (caf_token_t token, size_t index,
     *stat = 0;
 
   buf[0] = p->ev_id;
-  buf[1] = index;
+  buf[1] = (int)index;
 
   if(image_index == 0 || image_index == caf_this_image)
     {
@@ -2439,10 +2440,10 @@ PREFIX (event_wait) (caf_token_t token, size_t index,
       else
 	{
 	  tmp_var = (int*)ev_list[ev_buf[0]]->base;
-	  tmp_var[index]++;
+	  tmp_var[ev_buf[1]]++;
 	}
     }
-  
+
   var[index]-=until_count;
 
 /*   MPI_Win_get_attr(*p,MPI_WIN_BASE,&var,&flag); */
@@ -2492,35 +2493,46 @@ PREFIX (event_wait) (caf_token_t token, size_t index,
 
 void
 PREFIX (event_query) (caf_token_t token, size_t index,
-		      int image_index, int *count, int *stat)
+		      int image_index __attribute__ ((unused)),
+		      int *count, int *stat)
 {
-  int image,ierr=0;
-  MPI_Win *p = token;
+  int ierr=0, *var = NULL;
+  ev_struct *p = token;
+  const char msg[] = "Error on event query";
 
-  if(image_index == 0)
-    image = caf_this_image-1;
-  else
-    image = image_index-1;
+  /* if(image_index == 0) */
+  /*   image = caf_this_image-1; */
+  /* else */
+  /*   image = image_index-1; */
+
+  var = (int *) p->base;
+
+  *count = var[index];
 
   if(stat != NULL)
     *stat = 0;
 
-#if MPI_VERSION >= 3
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
-  ierr = MPI_Fetch_and_op(NULL, count, MPI_INT, image, index*sizeof(int), MPI_NO_OP, *p);
-# ifdef CAF_MPI_LOCK_UNLOCK
-  MPI_Win_unlock (image, *p);
-# else // CAF_MPI_LOCK_UNLOCK
-  MPI_Win_flush (image, *p);
-# endif // CAF_MPI_LOCK_UNLOCK
-#else // MPI_VERSION
-#warning Events for MPI-2 are not implemented
-  printf ("Events for MPI-2 are not supported, please update your MPI implementation\n");
-#endif // MPI_VERSION
-  if(ierr != MPI_SUCCESS && stat != NULL)
-    *stat = ierr;
+  return;
+
+/* #if MPI_VERSION >= 3 */
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image, 0, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
+/*   ierr = MPI_Fetch_and_op(NULL, count, MPI_INT, image, index*sizeof(int), MPI_NO_OP, *p); */
+/* # ifdef CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_unlock (image, *p); */
+/* # else // CAF_MPI_LOCK_UNLOCK */
+/*   MPI_Win_flush (image, *p); */
+/* # endif // CAF_MPI_LOCK_UNLOCK */
+/* #else // MPI_VERSION */
+/* #warning Events for MPI-2 are not implemented */
+/*   printf ("Events for MPI-2 are not supported, please update your MPI implementation\n"); */
+/* #endif // MPI_VERSION */
+ /* error_ev_query: */
+ /*  if(stat != NULL) */
+ /*    *stat = ierr; */
+ /*  else */
+ /*    PREFIX (error_stop_str) (msg, strlen(msg)); */
 }
 
 /* ERROR STOP the other images.  */

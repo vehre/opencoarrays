@@ -78,7 +78,7 @@ typedef void* caf_token_t;
 /* Event structure */
 
 typedef struct ev_struct {
-  long ev_id;
+  int ev_id;
   void *base;
   size_t len;
   /* /\* Used by LIBCAF_MPI *\/ */
