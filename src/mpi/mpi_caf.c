@@ -109,9 +109,9 @@ MPI_Comm CAF_COMM_WORLD;
 bool caf_owns_mpi = false;
 
 /* Foo function pointers for coreduce */
-int (*foo_int32_t)(void *, void *);
-float (*foo_float)(void *, void *);
-double (*foo_double)(void *, void *);
+int (*foo_int32_t)(int, int);
+float (*foo_float)(float, float);
+double (*foo_double)(double, double);
 
 #define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
 
@@ -1738,7 +1738,7 @@ name (void *invec, void *inoutvec, int *len, \
   int i;	     \
   for(i=0;i<*len;i++)				\
     {								\
-      *((dt*)inoutvec) = (dt)(FOOFUNC(dt)((dt *)invec,(dt *)inoutvec));	\
+      *((dt*)inoutvec) = (dt)(FOOFUNC(dt)(*(dt *)invec,*(dt *)inoutvec));	\
      invec+=sizeof(dt); inoutvec+=sizeof(dt);	\
    } \
 }
