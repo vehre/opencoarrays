@@ -64,7 +64,7 @@ while read -r line; do
   if ! echo "${line}" |egrep '\. Default=' >/dev/null 2>&1; then
     eval "${varname}=\"${init}\""
   else
-    match="$(echo "${line}" |sed 's#^.*Default=\(\)#\1#g')"
+    match="${line//*Default=/}"
     eval "${varname}=\"${match}\""
   fi
 done < "${__usage}"

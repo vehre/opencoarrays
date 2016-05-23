@@ -11,7 +11,7 @@ set_or_print_downloader()
   package_name="${arg_p:-${arg_D:-${arg_P:-${arg_U:-${arg_V:-${arg_B}}}}}}"
 
   if [[ "${package_name}" == "ofp" ]]; then
-    ${OPENCOARRAYS_SRC_DIR}/prerequisites/install-ofp.sh "${@}"
+    "${OPENCOARRAYS_SRC_DIR}/prerequisites/install-ofp.sh" "${@}"
     exit 0
   fi  
 

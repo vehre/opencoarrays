@@ -45,9 +45,9 @@ download_if_necessary()
       args="clone"
     elif [[ "${fetch}" == "curl" ]]; then
       first_three_characters=$(echo "${package_url}" | cut -c1-3)
-      if [[ "${first_three_characters}" == "ftp"  ]]; then 
+      if [[ "${first_three_characters}" == "ftp"  ]]; then
         args="-LO -u anonymous:"
-      elif [[ "${first_three_characters}" == "htt"  ]]; then 
+      elif [[ "${first_three_characters}" == "htt"  ]]; then
         args="-LO"
       else
         emergency "download_if_necessary.sh: Unrecognized URL."
@@ -64,7 +64,7 @@ download_if_necessary()
     info "Download command: \"${fetch}\" ${args:-} ${package_url}"
     info "Depending on the file size and network bandwidth, this could take several minutes or longer."
     pushd "${download_path}"
-    "${fetch}" ${args:-} ${package_url}
+    "${fetch}" ${args:-} "${package_url}"
     popd
     if [[ ! -z "${arg_B:-}" ]]; then
       return

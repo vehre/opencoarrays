@@ -23,7 +23,7 @@ print_header()
   fi
   popd > /dev/null
   echo ""
-  printf "${arg_p} will be installed in ${install_path}\n"
+  printf "%s will be installed in \n" "${arg_p}" "${install_path}"
   echo ""
   printf "Ready to rock and roll? (Y/n)"
   read -r install_now

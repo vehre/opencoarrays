@@ -15,7 +15,7 @@ set_or_print_downloader()
     wget_or_curl=curl
   else
     wget_or_curl=wget
-  fi  
+  fi
   # This is a bash 3 hack standing in for a bash 4 hash (bash 3 is the lowest common
   # denominator because, for licensing reasons, OS X only has bash 3 by default.)
   # See http://stackoverflow.com/questions/1494178/how-to-define-hash-tables-in-bash
