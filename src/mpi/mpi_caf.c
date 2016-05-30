@@ -1023,8 +1023,7 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
           if (GFC_DESCRIPTOR_TYPE (dest) == GFC_DESCRIPTOR_TYPE (src)
               && dst_kind == src_kind)
             ierr = MPI_Put (src->base_addr, size, dt_s,
-                            image_index-1, offset,
-                            (dst_size > src_size ? src_size : dst_size) * size,
+                            image_index-1, offset,size,
                             dt_d, *p);
           if (pad_str)
 	    {
