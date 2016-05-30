@@ -1414,7 +1414,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
 	      arr_dsp_s = calloc(src_vector->nvec, sizeof(int));
 	      arr_dsp_d = calloc(src_vector->nvec, sizeof(int));
 	      memcpy(arr_dsp_s,src_vector->u.v.vector,sizeof(int)*src_vector->nvec);
-	      free(src_vector->u.v.vector);
+	      /* free(src_vector->u.v.vector); */
 	      for(i=0;i<src_vector->nvec;i++)
 		{
 		  arr_bl[i] = 1;
