@@ -924,7 +924,7 @@ PREFIX (sendget) (caf_token_t token_s, size_t offset_s, int image_index_s,
 void
 PREFIX (send) (caf_token_t token, size_t offset, int image_index,
                gfc_descriptor_t *dest,
-               caf_vector_t *dst_vector __attribute__ ((unused)),
+               caf_vector_t *dst_vector,
                gfc_descriptor_t *src, int dst_kind, int src_kind,
                bool mrt)
 {
@@ -943,6 +943,9 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
   bool *buff_map = NULL;
   size_t src_size = GFC_DESCRIPTOR_SIZE (src);
   size_t dst_size = GFC_DESCRIPTOR_SIZE (dest);
+  MPI_Datatype dt_s, dt_d, base_type_src, base_type_dst;
+  int *arr_bl;
+  int *arr_dsp_s, *arr_dsp_d;
 
   size = 1;
   for (j = 0; j < rank; j++)
@@ -981,18 +984,51 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
         }
       else
         {
+	  /* Vector subscript */
+	  if(dst_vector != NULL)
+	    {
+	      selectType(src_size, &base_type_src);
+	      selectType(dst_size, &base_type_dst);
+	      arr_bl = calloc(dst_vector->nvec, sizeof(int));
+	      arr_dsp_s = calloc(dst_vector->nvec, sizeof(int));
+	      arr_dsp_d = calloc(dst_vector->nvec, sizeof(int));
+	      memcpy(arr_dsp_s,dst_vector->u.v.vector,sizeof(int)*dst_vector->nvec);
+	      free(dst_vector->u.v.vector);
+	      for(i=0;i<dst_vector->nvec;i++)
+		{
+		  arr_bl[i] = 1;
+		  arr_dsp_d[i]  = i;
+		  arr_dsp_s[i] -= 1;
+		}
+
+	      MPI_Type_indexed(size, arr_bl, arr_dsp_s, base_type_src, &dt_s);
+	      MPI_Type_indexed(size, arr_bl, arr_dsp_d, base_type_dst, &dt_d);
+	      
+	      MPI_Type_commit(&dt_s);
+	      MPI_Type_commit(&dt_d);
+	      free(arr_bl);
+	      free(arr_dsp_d);
+	      free(arr_dsp_s);
+	      size = 1;
+	    }
+	  else
+	    {
+	      selectType(1, &dt_s);
+	      selectType(1, &dt_d);
+	      size = (dst_size > src_size ? src_size : dst_size)*size;
+	    }
 #ifdef CAF_MPI_LOCK_UNLOCK
           MPI_Win_lock (MPI_LOCK_EXCLUSIVE, image_index-1, 0, *p);
 #endif // CAF_MPI_LOCK_UNLOCK
           if (GFC_DESCRIPTOR_TYPE (dest) == GFC_DESCRIPTOR_TYPE (src)
               && dst_kind == src_kind)
-            ierr = MPI_Put (src->base_addr, (dst_size > src_size ? src_size : dst_size)*size, MPI_BYTE,
+            ierr = MPI_Put (src->base_addr, size, dt_s,
                             image_index-1, offset,
                             (dst_size > src_size ? src_size : dst_size) * size,
-                            MPI_BYTE, *p);
+                            dt_d, *p);
           if (pad_str)
 	    {
-	      size_t newoff = offset + (dst_size > src_size ? src_size : dst_size) * size;
+	      size_t newoff = offset + size;
 	      ierr = MPI_Put (pad_str, dst_size-src_size, MPI_BYTE, image_index-1,
 			      newoff, dst_size - src_size, MPI_BYTE, *p);
 	    }
@@ -1020,6 +1056,11 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
 #else
 	  MPI_Win_flush (image_index-1, *p);
 #endif // CAF_MPI_LOCK_UNLOCK
+	  if(dst_vector != NULL)
+	    {
+	      MPI_Type_free(&dt_s);
+	      MPI_Type_free(&dt_d);
+	    }
         }
 
       if (ierr != 0)
@@ -1029,9 +1070,6 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
   else
     {
 #ifdef STRIDED
-      MPI_Datatype dt_s, dt_d, base_type_src, base_type_dst;
-      int *arr_bl;
-      int *arr_dsp_s, *arr_dsp_d;
 
       void *sr = src->base_addr;
 
@@ -1311,7 +1349,7 @@ void
 PREFIX (get) (caf_token_t token, size_t offset,
               int image_index,
               gfc_descriptor_t *src ,
-              caf_vector_t *src_vector __attribute__ ((unused)),
+              caf_vector_t *src_vector,
               gfc_descriptor_t *dest, int src_kind, int dst_kind,
               bool mrt)
 {
