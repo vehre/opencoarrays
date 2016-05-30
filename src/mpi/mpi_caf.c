@@ -744,6 +744,15 @@ void selectType(int size, MPI_Datatype *dt)
       return;
     }
 
+  MPI_Type_size(MPI_CHAR, &t_s);
+
+  if(t_s==size)
+    {
+      *dt=MPI_CHAR;
+      return;
+    }
+
+  MPI_Type_size(MPI_BYTE, &t_s);
 }
 
 void
@@ -1316,7 +1325,8 @@ PREFIX (get) (caf_token_t token, size_t offset,
   void *t_buff = NULL;
   bool *buff_map = NULL;
   void *pad_str = NULL;
-  /* size_t sr_off = 0;  */
+  int *arr_bl, *arr_dsp_s, *arr_dsp_d;
+  MPI_Datatype dt_s, dt_d, base_type_src, base_type_dst;
 
   size = 1;
   for (j = 0; j < rank; j++)
@@ -1358,11 +1368,44 @@ PREFIX (get) (caf_token_t token, size_t offset,
         }
       else
         {
+	  /* Vector subscript */
+	  if(src_vector != NULL)
+	    {
+	      selectType(src_size, &base_type_src);
+	      selectType(dst_size, &base_type_dst);
+	      arr_bl = calloc(src_vector->nvec, sizeof(int));
+	      arr_dsp_s = calloc(src_vector->nvec, sizeof(int));
+	      arr_dsp_d = calloc(src_vector->nvec, sizeof(int));
+	      memcpy(arr_dsp_s,src_vector->u.v.vector,sizeof(int)*src_vector->nvec);
+	      free(src_vector->u.v.vector);
+	      for(i=0;i<src_vector->nvec;i++)
+		{
+		  arr_bl[i] = 1;
+		  arr_dsp_d[i]  = i;
+		  arr_dsp_s[i] -= 1;
+		}
+
+	      MPI_Type_indexed(size, arr_bl, arr_dsp_s, base_type_src, &dt_s);
+	      MPI_Type_indexed(size, arr_bl, arr_dsp_d, base_type_dst, &dt_d);
+	      
+	      MPI_Type_commit(&dt_s);
+	      MPI_Type_commit(&dt_d);
+	      free(arr_bl);
+	      free(arr_dsp_d);
+	      free(arr_dsp_s);
+	      size = 1;
+	    }
+	  else
+	    {
+	      selectType(1, &dt_s);
+	      selectType(1, &dt_d);
+	      size = src_size*size;
+	    }
 # ifdef CAF_MPI_LOCK_UNLOCK
           MPI_Win_lock (MPI_LOCK_SHARED, image_index-1, 0, *p);
 # endif // CAF_MPI_LOCK_UNLOCK
-          ierr = MPI_Get (dest->base_addr, dst_size*size, MPI_BYTE,
-                          image_index-1, offset, dst_size*size, MPI_BYTE, *p);
+          ierr = MPI_Get (dest->base_addr, size, dt_d,
+                          image_index-1, offset, size, dt_s, *p);
           if (pad_str)
             memcpy ((char *) dest->base_addr + src_size, pad_str,
                     dst_size-src_size);
@@ -1371,6 +1414,11 @@ PREFIX (get) (caf_token_t token, size_t offset,
 # else // CAF_MPI_LOCK_UNLOCK
           MPI_Win_flush (image_index-1, *p);
 # endif // CAF_MPI_LOCK_UNLOCK
+	if(src_vector != NULL)
+	  {
+	     MPI_Type_free(&dt_s);
+	     MPI_Type_free(&dt_d);
+	  }
         }
       if (ierr != 0)
         error_stop (ierr);
@@ -1378,10 +1426,6 @@ PREFIX (get) (caf_token_t token, size_t offset,
     }
 
 #ifdef STRIDED
-
-  MPI_Datatype dt_s, dt_d, base_type_src, base_type_dst;
-  int *arr_bl;
-  int *arr_dsp_s, *arr_dsp_d;
 
   void *dst = dest->base_addr;
 
