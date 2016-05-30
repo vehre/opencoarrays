@@ -1023,7 +1023,7 @@ PREFIX (send) (caf_token_t token, size_t offset, int image_index,
           if (GFC_DESCRIPTOR_TYPE (dest) == GFC_DESCRIPTOR_TYPE (src)
               && dst_kind == src_kind)
             ierr = MPI_Put (src->base_addr, size, dt_s,
-                            image_index-1, offset,size,
+                            image_index-1, offset, size,
                             dt_d, *p);
           if (pad_str)
 	    {
@@ -1436,7 +1436,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
 	    {
 	      selectType(1, &dt_s);
 	      selectType(1, &dt_d);
-	      size = src_size*size;
+	      size = (dst_size > src_size ? src_size : dst_size)*size;
 	    }
 # ifdef CAF_MPI_LOCK_UNLOCK
           MPI_Win_lock (MPI_LOCK_SHARED, image_index-1, 0, *p);
