@@ -611,7 +611,8 @@ PREFIX(register_component) (caf_token_t token,
 			    int comp_id, void **component,
 			    int *stat, char *errmsg, int errmsg_len)
 {
-  *component = malloc(size);
+  if(component == NULL)
+    *component = malloc(size);
   MPI_Win_attach(token.sub_tokens[comp_id], *component, size);
   MPI_Get_address(*component, &local_addr[comp_id]);
 }
