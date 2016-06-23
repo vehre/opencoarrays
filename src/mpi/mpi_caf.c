@@ -472,13 +472,14 @@ void *
 #else
 void *
   PREFIX (register) (size_t size, caf_register_t type, caf_token_t *token,
-                  int *stat, char *errmsg, int errmsg_len)
+		     int *stat, char *errmsg, int errmsg_len, int n_alloc_comps)
 #endif
 {
   /* int ierr; */
   void *mem;
   size_t actual_size;
-  int l_var=0, *init_array=NULL;
+  int l_var=0, *init_array=NULL,i;
+  caf_token_t *tmp_tok;
 
   if (unlikely (caf_is_finalized))
     goto error;
@@ -493,9 +494,30 @@ void *
 
   /* Token contains only a list of pointers.  */
 
-  *token = malloc (sizeof(MPI_Win));
+  /* *token = malloc (sizeof(MPI_Win)); */
+  *token = malloc (sizeof(caf_token_t));
+  tmp_token = *token;
+  tmp_token->main_token = malloc(sizeof(MPI_Win));
 
-  MPI_Win *p = *token;
+  tmp_token->n_subtokens = n_alloc_comps;
+  if(n_alloc_comps != 0)
+    {
+      tmp_token->sub_tokens = calloc(n_alloc_comps,sizeof(MPI_Win *));
+      tmp_token->sub_tokens_addrs = calloc(n_alloc_comps,sizeof(MPI_Win *));
+      tmp_token->local_addrs = calloc(n_alloc_comps,sizeof(MPI_Aint));
+      
+      for(i=0;i<n_alloc_comps;i++)
+	{
+	  tmp_token->sub_tokens[i] = malloc(sizeof(MPI_Win));
+	  /* tmp_token->sub_tokens_addr[i] = malloc(sizeof(MPI_Win)); */
+	  MPI_Win_allocate(sizeof(MPI_Aint), MPI_Aint, mpi_info_same_size, CAF_COMM_WORLD,
+			   &tmp_token->local_addrs[i], tmp_token->sub_token_addrs[i]);
+	  MPI_Win_create_dynamic(MPI_INFO_NULL, CAF_COMM_WORLD, &tmp_token->sub_tokens[i]);
+	}
+    }
+
+  /* MPI_Win *p = *token; */
+  MPI_Win *p = tmp_token->main_token;
 
   if(type == CAF_REGTYPE_LOCK_STATIC || type == CAF_REGTYPE_LOCK_ALLOC ||
      type == CAF_REGTYPE_CRITICAL || type == CAF_REGTYPE_EVENT_STATIC ||
@@ -508,16 +530,16 @@ void *
     actual_size = size;
 
 #if MPI_VERSION >= 3
-  MPI_Win_allocate(actual_size, 1, mpi_info_same_size, CAF_COMM_WORLD, &mem, *token);
+  MPI_Win_allocate(actual_size, 1, mpi_info_same_size, CAF_COMM_WORLD, &mem, p);
 # ifndef CAF_MPI_LOCK_UNLOCK
   MPI_Win_lock_all(MPI_MODE_NOCHECK, *p);
 # endif // CAF_MPI_LOCK_UNLOCK
 #else // MPI_VERSION
   MPI_Alloc_mem(actual_size, MPI_INFO_NULL, &mem);
-  MPI_Win_create(mem, actual_size, 1, MPI_INFO_NULL, CAF_COMM_WORLD, *token);
+  MPI_Win_create(mem, actual_size, 1, MPI_INFO_NULL, CAF_COMM_WORLD, p);
 #endif // MPI_VERSION
 
-  p = *token;
+  p = tmp_token->main_token;
 
   if(l_var)
     {
@@ -539,14 +561,14 @@ void *
 
   caf_static_t *tmp = malloc (sizeof (caf_static_t));
   tmp->prev  = caf_tot;
-  tmp->token = *token;
+  tmp->token =  tmp_token->main_token;
   caf_tot = tmp;
 
   if (type == CAF_REGTYPE_COARRAY_STATIC)
     {
       tmp = malloc (sizeof (caf_static_t));
       tmp->prev  = caf_static_list;
-      tmp->token = *token;
+      tmp->token = tmp_token->main_token;
       caf_static_list = tmp;
     }
 
@@ -583,6 +605,16 @@ error:
   return NULL;
 }
 
+void
+PREFIX(register_component) (caf_token_t token,
+			    caf_register_t type, size_t size,
+			    int comp_id, void **component,
+			    int *stat, char *errmsg, int errmsg_len)
+{
+  *component = malloc(size);
+  MPI_Win_attach(token.sub_tokens[comp_id], *component, size);
+  MPI_Get_address(*component, &local_addr[comp_id]);
+}
 
 void
 PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len)
