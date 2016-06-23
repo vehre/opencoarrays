@@ -513,6 +513,8 @@ void *
 	  MPI_Win_allocate(sizeof(MPI_Aint), MPI_Aint, mpi_info_same_size, CAF_COMM_WORLD,
 			   &tmp_token->local_addrs[i], tmp_token->sub_token_addrs[i]);
 	  MPI_Win_create_dynamic(MPI_INFO_NULL, CAF_COMM_WORLD, &tmp_token->sub_tokens[i]);
+	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_tokens[i]);
+	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_token_addrs[i]);
 	}
     }
 
@@ -611,7 +613,7 @@ PREFIX(register_component) (caf_token_t token,
 			    int comp_id, void **component,
 			    int *stat, char *errmsg, int errmsg_len)
 {
-  if(component == NULL)
+  if(*component == NULL)
     *component = malloc(size);
   MPI_Win_attach(token.sub_tokens[comp_id], *component, size);
   MPI_Get_address(*component, &local_addr[comp_id]);
