@@ -425,7 +425,7 @@ PREFIX (finalize) (void)
   while(tmp_tot)
     {
       prev = tmp_tot->prev;
-      p = tmp_tot->token;
+      p = (MPI_Win *)((caf_token_t_struct *)tmp_tot->token)->main_token;
 # ifndef CAF_MPI_LOCK_UNLOCK
       MPI_Win_unlock_all(*p);
 # endif // CAF_MPI_LOCK_UNLOCK
@@ -468,7 +468,7 @@ PREFIX (num_images)(int distance __attribute__ ((unused)),
 #ifdef COMPILER_SUPPORTS_CAF_INTRINSICS
 void *
   _gfortran_caf_register (size_t size, caf_register_t type, caf_token_t *token,
-                  int *stat, char *errmsg, int errmsg_len)
+			  int *stat, char *errmsg, int errmsg_len, int n_alloc_comps)
 #else
 void *
   PREFIX (register) (size_t size, caf_register_t type, caf_token_t *token,
@@ -479,26 +479,26 @@ void *
   void *mem;
   size_t actual_size;
   int l_var=0, *init_array=NULL,i;
-  caf_token_t *tmp_tok;
-
+  caf_token_t_struct *tmp_token;
+  
   if (unlikely (caf_is_finalized))
     goto error;
-
+  
   /* Start GASNET if not already started.  */
   if (caf_num_images == 0)
 #ifdef COMPILER_SUPPORTS_CAF_INTRINSICS
     _gfortran_caf_init (NULL, NULL);
 #else
-    PREFIX (init) (NULL, NULL);
+  PREFIX (init) (NULL, NULL);
 #endif
-
+    
   /* Token contains only a list of pointers.  */
-
+  
   /* *token = malloc (sizeof(MPI_Win)); */
-  *token = malloc (sizeof(caf_token_t));
+  *token = malloc (sizeof(struct caf_token_t_struct));
   tmp_token = *token;
   tmp_token->main_token = malloc(sizeof(MPI_Win));
-
+  
   tmp_token->n_subtokens = n_alloc_comps;
   if(n_alloc_comps != 0)
     {
@@ -510,11 +510,11 @@ void *
 	{
 	  tmp_token->sub_tokens[i] = malloc(sizeof(MPI_Win));
 	  /* tmp_token->sub_tokens_addr[i] = malloc(sizeof(MPI_Win)); */
-	  MPI_Win_allocate(sizeof(MPI_Aint), MPI_Aint, mpi_info_same_size, CAF_COMM_WORLD,
-			   &tmp_token->local_addrs[i], tmp_token->sub_token_addrs[i]);
+	  MPI_Win_allocate(sizeof(MPI_Aint), MPI_INT, mpi_info_same_size, CAF_COMM_WORLD,
+			   &tmp_token->local_addrs[i], tmp_token->sub_tokens_addrs[i]);
 	  MPI_Win_create_dynamic(MPI_INFO_NULL, CAF_COMM_WORLD, &tmp_token->sub_tokens[i]);
 	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_tokens[i]);
-	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_token_addrs[i]);
+	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_tokens_addrs[i]);
 	}
     }
 
@@ -563,14 +563,14 @@ void *
 
   caf_static_t *tmp = malloc (sizeof (caf_static_t));
   tmp->prev  = caf_tot;
-  tmp->token =  tmp_token->main_token;
+  tmp->token = tmp_token;
   caf_tot = tmp;
 
   if (type == CAF_REGTYPE_COARRAY_STATIC)
     {
       tmp = malloc (sizeof (caf_static_t));
       tmp->prev  = caf_static_list;
-      tmp->token = tmp_token->main_token;
+      tmp->token = tmp_token;
       caf_static_list = tmp;
     }
 
@@ -613,10 +613,11 @@ PREFIX(register_component) (caf_token_t token,
 			    int comp_id, void **component,
 			    int *stat, char *errmsg, int errmsg_len)
 {
+  caf_token_t_struct *tmp_token = token;
   if(*component == NULL)
     *component = malloc(size);
-  MPI_Win_attach(token.sub_tokens[comp_id], *component, size);
-  MPI_Get_address(*component, &local_addr[comp_id]);
+  MPI_Win_attach(tmp_token->sub_tokens[comp_id], *component, size);
+  MPI_Get_address(*component, &tmp_token->local_addrs[comp_id]);
 }
 
 void
@@ -648,15 +649,16 @@ PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len
   PREFIX (sync_all) (NULL, NULL, 0);
 
   caf_static_t *tmp = caf_tot, *prev = caf_tot, *next=caf_tot;
-  MPI_Win *p = *token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p = tmp_token->main_token;
 
   while(tmp)
     {
       prev = tmp->prev;
 
-      if(tmp->token == *token)
+      if(tmp->token == tmp_token)
         {
-          p = *token;
+          p = tmp_token->main_token;
 # ifndef CAF_MPI_LOCK_UNLOCK
           MPI_Win_unlock_all(*p);
 # endif // CAF_MPI_LOCK_UNLOCK
