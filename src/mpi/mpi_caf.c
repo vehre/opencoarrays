@@ -480,6 +480,8 @@ void *
   size_t actual_size;
   int l_var=0, *init_array=NULL,i;
   caf_token_t_struct *tmp_token;
+  MPI_Win *win_list_subtokens, *win_list_addrs;
+  MPI_Aint *local_addrs;
   
   if (unlikely (caf_is_finalized))
     goto error;
@@ -495,26 +497,30 @@ void *
   /* Token contains only a list of pointers.  */
   
   /* *token = malloc (sizeof(MPI_Win)); */
-  *token = malloc (sizeof(struct caf_token_t_struct *));
+  *token = malloc (sizeof(caf_token_t_struct));
   tmp_token = *token;
   tmp_token->main_token = malloc(sizeof(MPI_Win));
   
   tmp_token->n_subtokens = n_alloc_comps;
   if(n_alloc_comps != 0)
     {
-      tmp_token->sub_tokens = calloc(n_alloc_comps,sizeof(MPI_Win *));
+      tmp_token->sub_tokens = calloc(n_alloc_comps,sizeof(MPI_Win));
       tmp_token->sub_tokens_addrs = calloc(n_alloc_comps,sizeof(MPI_Win));
-      tmp_token->local_addrs = calloc(n_alloc_comps,sizeof(MPI_Aint));
+      local_addrs = calloc(n_alloc_comps,sizeof(MPI_Aint));
+      tmp_token->local_addrs = (void *)local_addrs;
+      win_list_subtokens = tmp_token->sub_tokens;
+      win_list_addrs = tmp_token->sub_tokens_addrs;
       
       for(i=0;i<n_alloc_comps;i++)
 	{
-	  tmp_token->sub_tokens[i] = malloc(sizeof(MPI_Win));
-	  tmp_token->sub_tokens_addrs[i] = malloc(sizeof(MPI_Win));
-	  MPI_Win_allocate(sizeof(MPI_Aint), MPI_INT, mpi_info_same_size, CAF_COMM_WORLD,
-			   &tmp_token->local_addrs[i], &tmp_token->sub_tokens_addrs[i]);
-	  MPI_Win_create_dynamic(MPI_INFO_NULL, CAF_COMM_WORLD, &tmp_token->sub_tokens[i]);
-	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_tokens[i]);
-	  MPI_Win_lock_all(MPI_MODE_NOCHECK, tmp_token->sub_tokens_addrs[i]);
+	  /* tmp_token->sub_tokens[i] = malloc(sizeof(MPI_Win)); */
+	  /* tmp_token->sub_tokens_addrs[i] = malloc(sizeof(MPI_Win)); */
+	  /* MPI_Win_allocate(sizeof(MPI_Aint), MPI_INT, mpi_info_same_size, CAF_COMM_WORLD, */
+	  /* 		   &tmp_token->local_addrs[i], &win_list_addrs[i]); */
+	  MPI_Win_create(&local_addrs[i], 1, MPI_LONG, MPI_INFO_NULL, CAF_COMM_WORLD, &win_list_addrs[i]);
+	  MPI_Win_create_dynamic(MPI_INFO_NULL, CAF_COMM_WORLD, &win_list_subtokens[i]);
+	  MPI_Win_lock_all(MPI_MODE_NOCHECK, win_list_subtokens[i]);
+	  MPI_Win_lock_all(MPI_MODE_NOCHECK, win_list_addrs[i]);
 	}
     }
 
@@ -614,11 +620,16 @@ PREFIX(register_component) (caf_token_t token,
 			    int *stat, char *errmsg, int errmsg_len)
 {
   caf_token_t_struct *tmp_token = token;
+  MPI_Win *win_list_subtokens, *win_list_addrs;
+  MPI_Aint *local_addrs;
   if(*component == NULL)
     *component = malloc(size);
-  MPI_Win_attach(tmp_token->sub_tokens[comp_id], *component, size);
-  MPI_Get_address(*component, &tmp_token->local_addrs[comp_id]);
-  MPI_Win_sync(tmp_token->sub_tokens_addrs[comp_id]);
+  win_list_subtokens = tmp_token->sub_tokens;
+  win_list_addrs = tmp_token->sub_tokens_addrs;
+  local_addrs = tmp_token->local_addrs;
+  MPI_Win_attach(win_list_subtokens[comp_id], *component, size);
+  MPI_Get_address(*component, &local_addrs[comp_id]);
+  MPI_Win_sync(win_list_addrs[comp_id]);
 }
 
 void
@@ -1346,9 +1357,11 @@ PREFIX (get) (caf_token_t token, size_t relative_offset,
               bool mrt, int comp_id)
 {
   caf_token_t_struct *tmp_token = token;
-  size_t i, size, addr, offset;
+  size_t i, size, offset;
   int ierr = 0, j;
+  MPI_Aint addr;
   MPI_Win *p, *addr_win;
+  MPI_Win *win_list_subtokens;
   int rank = GFC_DESCRIPTOR_RANK (src);
   size_t src_size = GFC_DESCRIPTOR_SIZE (src);
   size_t dst_size = GFC_DESCRIPTOR_SIZE (dest);
@@ -1361,12 +1374,11 @@ PREFIX (get) (caf_token_t token, size_t relative_offset,
 
   if(comp_id != -1)
     {
-      printf("Before getting value\n");
-      addr_win = &tmp_token->sub_tokens_addrs[comp_id];
-      MPI_Get(&addr,1,MPI_INT,image_index-1,0,1,MPI_INT,*addr_win);
+      addr_win = tmp_token->sub_tokens_addrs;
+      MPI_Get(&addr,1,MPI_LONG,image_index-1,0,1,MPI_LONG,addr_win[comp_id]);
       MPI_Win_flush(image_index-1,*addr_win);
-      p = &tmp_token->sub_tokens[comp_id];
-      printf("After getting value %p\n",addr);
+      win_list_subtokens = tmp_token->sub_tokens;
+      p = &win_list_subtokens[comp_id];
     }
   else
     {
@@ -1421,7 +1433,6 @@ PREFIX (get) (caf_token_t token, size_t relative_offset,
 # endif // CAF_MPI_LOCK_UNLOCK
           ierr = MPI_Get (dest->base_addr, dst_size*size, MPI_BYTE,
                           image_index-1, offset, dst_size*size, MPI_BYTE, *p);
-	  printf("Getting %d\n",image_index);
           if (pad_str)
             memcpy ((char *) dest->base_addr + src_size, pad_str,
                     dst_size-src_size);

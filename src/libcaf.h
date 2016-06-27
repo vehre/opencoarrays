@@ -76,8 +76,8 @@ caf_register_t;
 typedef struct caf_token_t_struct {
   void* main_token;
   int n_subtokens;
-  void** sub_tokens;
-  void** sub_tokens_addrs;
+  void* sub_tokens;
+  void* sub_tokens_addrs;
   void* local_addrs;
 }
 caf_token_t_struct;
