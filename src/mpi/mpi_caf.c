@@ -2207,7 +2207,10 @@ PREFIX (lock) (caf_token_t token, size_t index, int image_index,
                int errmsg_len)
 {
   int dest_img;
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
+
+  p = tmp_token->main_token;
 
   if(image_index == 0)
     dest_img = caf_this_image;
@@ -2223,8 +2226,11 @@ PREFIX (unlock) (caf_token_t token, size_t index, int image_index,
                  int *stat, char *errmsg, int errmsg_len)
 {
   int dest_img;
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
 
+  p = tmp_token->main_token;
+    
   if(image_index == 0)
     dest_img = caf_this_image;
   else
@@ -2240,11 +2246,14 @@ PREFIX (atomic_define) (caf_token_t token, size_t offset,
                         int image_index, void *value, int *stat,
                         int type __attribute__ ((unused)), int kind)
 {
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
   MPI_Datatype dt;
   int ierr = 0;
   int image;
 
+  p = tmp_token->main_token;
+    
   if(image_index != 0)
     image = image_index-1;
   else
@@ -2282,10 +2291,13 @@ PREFIX(atomic_ref) (caf_token_t token, size_t offset,
                     void *value, int *stat,
                     int type __attribute__ ((unused)), int kind)
 {
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
   MPI_Datatype dt;
   int ierr = 0;
   int image;
+
+  p = tmp_token->main_token;
 
   if(image_index != 0)
     image = image_index-1;
@@ -2325,10 +2337,13 @@ PREFIX(atomic_cas) (caf_token_t token, size_t offset,
                     void *new_val, int *stat,
                     int type __attribute__ ((unused)), int kind)
 {
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
   MPI_Datatype dt;
   int ierr = 0;
   int image;
+
+  p = tmp_token->main_token;
 
   if(image_index != 0)
     image = image_index-1;
@@ -2369,10 +2384,13 @@ PREFIX (atomic_op) (int op, caf_token_t token ,
                     int type __attribute__ ((unused)),
                     int kind)
 {
+  caf_token_t_struct *tmp_token = token;
   int ierr = 0;
   MPI_Datatype dt;
-  MPI_Win *p = token;
+  MPI_Win *p;
   int image;
+
+  p = tmp_token->main_token;
 
 #if MPI_VERSION >= 3
   old = malloc(kind);
