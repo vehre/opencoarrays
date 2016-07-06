@@ -963,27 +963,48 @@ PREFIX (sendget) (caf_token_t token_s, size_t offset_s, int image_index_s,
 /* The last argument means may_require_temporary */
 
 void
-PREFIX (send) (caf_token_t token, size_t offset, int image_index,
+PREFIX (send) (caf_token_t token, size_t relative_offset, int image_index,
                gfc_descriptor_t *dest,
                caf_vector_t *dst_vector __attribute__ ((unused)),
                gfc_descriptor_t *src, int dst_kind, int src_kind,
-               bool mrt)
+               bool mrt, int comp_id)
 {
   /* FIXME: Implement vector subscripts, type conversion and check whether
      string-kind conversions are permitted.
      FIXME: Implement sendget as well.  */
   int ierr = 0;
+  caf_token_t_struct *tmp_token = token;
   size_t i, size;
   int j;
+  MPI_Aint addr,offset;
   /* int position, msg = 0;  */
   int rank = GFC_DESCRIPTOR_RANK (dest);
-  MPI_Win *p = token;
+  MPI_Win *p, *addr_win;
+  MPI_Win *win_list_subtokens;
   ptrdiff_t dst_offset = 0;
   void *pad_str = NULL;
   void *t_buff = NULL;
   bool *buff_map = NULL;
   size_t src_size = GFC_DESCRIPTOR_SIZE (src);
   size_t dst_size = GFC_DESCRIPTOR_SIZE (dest);
+
+  offset = relative_offset;
+
+  if(comp_id != -1)
+    {
+      addr_win = tmp_token->sub_tokens_addrs;
+      MPI_Get(&addr,1,MPI_UNSIGNED_LONG,image_index-1,0,1,MPI_UNSIGNED_LONG,addr_win[comp_id]);
+      MPI_Win_flush(image_index-1,*addr_win);
+      win_list_subtokens = tmp_token->sub_tokens;
+      p = &win_list_subtokens[comp_id];
+    }
+  else
+    {
+      addr = 0;
+      p = tmp_token->main_token;
+    }
+  
+  offset += addr;
 
   size = 1;
   for (j = 0; j < rank; j++)
@@ -1357,9 +1378,9 @@ PREFIX (get) (caf_token_t token, size_t relative_offset,
               bool mrt, int comp_id)
 {
   caf_token_t_struct *tmp_token = token;
-  size_t i, size, offset;
+  size_t i, size;
   int ierr = 0, j;
-  MPI_Aint addr;
+  MPI_Aint addr,offset;
   MPI_Win *p, *addr_win;
   MPI_Win *win_list_subtokens;
   int rank = GFC_DESCRIPTOR_RANK (src);
@@ -1375,7 +1396,7 @@ PREFIX (get) (caf_token_t token, size_t relative_offset,
   if(comp_id != -1)
     {
       addr_win = tmp_token->sub_tokens_addrs;
-      MPI_Get(&addr,1,MPI_LONG,image_index-1,0,1,MPI_LONG,addr_win[comp_id]);
+      MPI_Get(&addr,1,MPI_UNSIGNED_LONG,image_index-1,0,1,MPI_UNSIGNED_LONG,addr_win[comp_id]);
       MPI_Win_flush(image_index-1,*addr_win);
       win_list_subtokens = tmp_token->sub_tokens;
       p = &win_list_subtokens[comp_id];
