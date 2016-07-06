@@ -2432,8 +2432,11 @@ PREFIX (event_post) (caf_token_t token, size_t index,
 		     char *errmsg, int errmsg_len)
 {
   int image, value=1, ierr=0;
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p;
   const char msg[] = "Error on event post";
+
+  p = tmp_token->main_token;
 
   if(image_index == 0)
     image = caf_this_image-1;
@@ -2475,11 +2478,14 @@ PREFIX (event_wait) (caf_token_t token, size_t index,
 		     char *errmsg, int errmsg_len)
 {
   int ierr=0,count=0,i,image=caf_this_image-1;
+  caf_token_t_struct *tmp_token = token;
   int *var=NULL,flag,old=0;
   int newval=0;
   const int spin_loop_max = 20000;
-  MPI_Win *p = token;
+  MPI_Win *p;
   const char msg[] = "Error on event wait";
+
+  p = tmp_token->main_token;
 
   if(stat != NULL)
     *stat = 0;
@@ -2534,7 +2540,10 @@ PREFIX (event_query) (caf_token_t token, size_t index,
 		      int image_index, int *count, int *stat)
 {
   int image,ierr=0;
-  MPI_Win *p = token;
+  MPI_Win *p;
+  caf_token_t_struct *tmp_token = token;
+
+  p = tmp_token->main_token;
 
   if(image_index == 0)
     image = caf_this_image-1;
