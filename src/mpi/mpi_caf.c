@@ -633,6 +633,22 @@ PREFIX(register_component) (caf_token_t token,
 }
 
 void
+PREFIX(deregister_component) (caf_token_t token, int comp_id, void **component,
+			      int *stat, char *errmsg, int errmsg_len)
+{
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *win_list_subtokens, *win_list_addrs;
+  MPI_Aint *local_addrs;
+  win_list_subtokens = tmp_token->sub_tokens;
+  win_list_addrs = tmp_token->sub_tokens_addrs;
+  local_addrs = tmp_token->local_addrs;
+  local_addrs[comp_id] = NULL;
+  MPI_Win_sync(win_list_addrs[comp_id]);
+  MPI_Win_detach(win_list_subtokens[comp_id], *component);
+  free(*component);
+}
+
+void
 PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len)
 {
   /* int ierr; */
@@ -797,25 +813,47 @@ void selectType(int size, MPI_Datatype *dt)
 }
 
 void
-PREFIX (sendget) (caf_token_t token_s, size_t offset_s, int image_index_s,
+PREFIX (sendget) (caf_token_t token_s, size_t rel_offset_s, int image_index_s,
                   gfc_descriptor_t *dest,
                   caf_vector_t *dst_vector __attribute__ ((unused)),
-                  caf_token_t token_g, size_t offset_g,
+                  caf_token_t token_g, size_t rel_offset_g,
                   int image_index_g, gfc_descriptor_t *src ,
                   caf_vector_t *src_vector __attribute__ ((unused)),
-                  int src_kind, int dst_kind, bool mrt)
+                  int src_kind, int dst_kind, bool mrt, int comp_id)
 {
   int ierr = 0;
   size_t i, size;
   int j;
+  caf_token_t_struct *tmp_token_s = token_s, *tmp_token_g = token_g;
   int rank = GFC_DESCRIPTOR_RANK (dest);
-  MPI_Win *p_s = token_s, *p_g = token_g;
+  MPI_Win *p_s, *p_g, *addr_win;
   ptrdiff_t dst_offset = 0;
   ptrdiff_t src_offset = 0;
   void *pad_str = NULL;
   size_t src_size = GFC_DESCRIPTOR_SIZE (src);
   size_t dst_size = GFC_DESCRIPTOR_SIZE (dest);
   char *tmp;
+  MPI_Aint addr_s,offset_s,offset_g;
+  MPI_Win *win_list_subtokens;
+
+  offset_s = rel_offset_s;
+  offset_g = rel_offset_g;
+
+  if(comp_id != -1)
+    {
+      addr_win = tmp_token_s->sub_tokens_addrs;
+      MPI_Get(&addr_s,1,MPI_UNSIGNED_LONG,image_index_s-1,0,1,MPI_UNSIGNED_LONG,addr_win[comp_id]);
+      MPI_Win_flush(image_index_s-1,*addr_win);
+      win_list_subtokens = tmp_token_s->sub_tokens;
+      p_s = &win_list_subtokens[comp_id];
+    }
+  else
+    {
+      addr_s = 0;
+      p_s = tmp_token_s->main_token;
+    }
+
+  offset_s += addr_s;
 
   size = 1;
   for (j = 0; j < rank; j++)
