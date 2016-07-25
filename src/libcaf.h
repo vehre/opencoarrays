@@ -75,7 +75,6 @@ caf_register_t;
 
 typedef void* caf_token_t;
 
-
 /* Linked list of static coarrays registered.  */
 typedef struct caf_static_t {
   caf_token_t token;
@@ -100,7 +99,81 @@ typedef struct caf_vector_t {
 }
 caf_vector_t;
 
+typedef enum caf_ref_type_t {
+  /* Reference a component of a derived type, either regular one or an
+     allocatable or pointer type.  For regular ones idx in caf_reference_t is
+     set to -1.  */
+  CAF_REF_COMPONENT,
+  /* Reference an array.  */
+  CAF_REF_ARRAY
+} caf_ref_type_t;
 
+typedef enum caf_array_ref_t {
+  /* No array ref.  This terminates the array ref.  */
+  CAF_ARR_REF_NONE = 0,
+  /* Reference array elements given by a vector.  Only for this mode
+     caf_reference_t.u.a.dim[i].v is valid.  */
+  CAF_ARR_REF_VECTOR,
+  /* A full array ref where the full array ref (:) is *not* given in the
+     source code, meaning reallocation allowed.  */
+  CAF_ARR_REF_IMP_FULL,
+  /* A full array ref with the (:) explicitly given in the source code.
+     I.e. no reallocation allowed.  */
+  CAF_ARR_REF_EXP_FULL,
+  /* Reference a range on elements given by start, end and stride.  */
+  CAF_ARR_REF_RANGE,
+  /* Only a single item is referenced given in the start member.  */
+  CAF_ARR_REF_SINGLE,
+  /* An array ref of the kind (i:), where i is an arbitrary valid index in the
+     array.  The index i is given in the start member.  */
+  CAF_ARR_REF_OPEN_END,
+  /* An array ref of the kind (:i), where the lower bound of the array ref
+     is given by the remote side.  The index i is given in the end member.  */
+  CAF_ARR_REF_OPEN_START
+} caf_array_ref_t;
+
+/* References to remote components of a derived type.  */
+typedef struct caf_reference_t {
+  /* A pointer to the next ref or NULL.  */
+  struct caf_reference_t *next;
+  /* The type of the reference.  */
+  /* caf_ref_type_t */
+  int type;
+  /* The size of an item referenced in bytes.  I.e. in an array ref this is
+     the factor to advance the array pointer with to get to the next item.
+     For component refs this gives just the size of the element referenced.  */
+  size_t item_size;
+  union {
+    struct {
+      /* The offset (in bytes) of the component in the derived type.
+	 Unused for allocatable or pointer components.  */
+      ptrdiff_t offset;
+      /* The index of the allocatable or pointer component in the derived
+	 type.  -1 for all other components (then offset is valid).  */
+      int idx;
+    } c;
+    struct {
+      /* The mode of the array ref.  See CAF_ARR_REF_*.  */
+      /* caf_array_ref_t */
+      unsigned char mode[GFC_MAX_DIMENSIONS];
+      /* Subscript refs (s) or vector refs (v).  */
+      union {
+	struct {
+	  /* The start and end boundary of the ref and the stride.  */
+	  int start, end, stride;
+	} s;
+	struct {
+	  /* nvec entries of kind giving the elements to reference.  */
+	  void *vector;
+	  /* The number of entries in vector.  */
+	  size_t nvec;
+	  /* The integer kind used for the elements in vector.  */
+	  int kind;
+	} v;
+      } dim[GFC_MAX_DIMENSIONS];
+    } a;
+  } u;
+} caf_reference_t;
 
 /* Common auxiliary functions: caf_auxiliary.c.  */
 

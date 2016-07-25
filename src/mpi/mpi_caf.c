@@ -1595,6 +1595,34 @@ PREFIX (get) (caf_token_t token, size_t offset,
 #endif
 }
 
+void
+PREFIX(register_component) (caf_token_t token, caf_register_t type,
+				  size_t size, int comp_idx,
+				  gfc_descriptor_t *descriptor,
+				  int *stat, char *errmsg, int errmsg_len,
+				  int num_comp)
+{
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *win_list_subtokens, *win_list_addrs;
+  MPI_Aint *local_addrs;
+  if(*component == NULL)
+    *component = malloc(size);
+  win_list_subtokens = tmp_token->sub_tokens;
+  win_list_addrs = tmp_token->sub_tokens_addrs;
+  local_addrs = tmp_token->local_addrs;
+  MPI_Win_attach(win_list_subtokens[comp_id], *component, size);
+  MPI_Get_address(*component, &local_addrs[comp_id]);
+  MPI_Win_sync(win_list_addrs[comp_id]);
+}
+
+void
+_gfortran_caf_get_by_ref (caf_token_t token,
+			  int image_index, gfc_descriptor_t *dst, caf_reference_t *refs,
+			  int dst_kind, int src_kind, bool may_require_tmp,
+			  bool dst_reallocatable, int *stat)
+{
+	
+}
 
 /* SYNC IMAGES. Note: SYNC IMAGES(*) is passed as count == -1 while
    SYNC IMAGES([]) has count == 0. Note further that SYNC IMAGES(*)
