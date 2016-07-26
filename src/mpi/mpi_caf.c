@@ -1347,7 +1347,8 @@ PREFIX (get) (caf_token_t token, size_t offset,
   size_t i, size;
   int ierr = 0;
   int j;
-  MPI_Win *p = token;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p = tmp_token->main_token;
   int rank = GFC_DESCRIPTOR_RANK (src);
   size_t src_size = GFC_DESCRIPTOR_SIZE (src);
   size_t dst_size = GFC_DESCRIPTOR_SIZE (dest);
@@ -1459,7 +1460,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
                 * dest->dim[j]._stride;
               extent = (dest->dim[j]._ubound - dest->dim[j].lower_bound + 1);
               stride = dest->dim[j]._stride;
-	      tot_ext *= extent;
+	      	  tot_ext *= extent;
             }
 
 	  //extent = (dest->dim[rank-1]._ubound - dest->dim[rank-1].lower_bound + 1);
@@ -1469,7 +1470,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
           ptrdiff_t array_offset_sr = 0;
           stride = 1;
           extent = 1;
-	  tot_ext = 1;
+	  	  tot_ext = 1;
           for (j = 0; j < GFC_DESCRIPTOR_RANK (src)-1; j++)
             {
               array_offset_sr += ((i / tot_ext)
@@ -1542,7 +1543,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
                               * dest->dim[j]._stride;
           extent = (dest->dim[j]._ubound - dest->dim[j].lower_bound + 1);
           stride = dest->dim[j]._stride;
-	  tot_ext *= extent;
+	  	  tot_ext *= extent;
         }
 
       array_offset_dst += (i / tot_ext) * dest->dim[rank-1]._stride;
@@ -1559,7 +1560,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
                           * src->dim[j]._stride;
           extent = (src->dim[j]._ubound - src->dim[j].lower_bound + 1);
           stride = src->dim[j]._stride;
-	  tot_ext *= extent;
+		  tot_ext *= extent;
         }
 
       array_offset_sr += (i / tot_ext) * src->dim[rank-1]._stride;
@@ -1601,7 +1602,7 @@ PREFIX (get) (caf_token_t token, size_t offset,
               ptrdiff_t array_offset_sr = 0;
               ptrdiff_t stride = 1;
               ptrdiff_t extent = 1;
-	      ptrdiff_t tot_ext = 1;
+		      ptrdiff_t tot_ext = 1;
               for (j = 0; j < GFC_DESCRIPTOR_RANK (src)-1; j++)
                 {
                   array_offset_sr += ((i / tot_ext)
@@ -1633,12 +1634,31 @@ PREFIX (get) (caf_token_t token, size_t offset,
 }
 
 void
-_gfortran_caf_get_by_ref (caf_token_t token,
-			  int image_index, gfc_descriptor_t *dst, caf_reference_t *refs,
-			  int dst_kind, int src_kind, bool may_require_tmp,
-			  bool dst_reallocatable, int *stat)
+PREFIX(get_by_ref) (caf_token_t token, int image_index, gfc_descriptor_t *dst,
+			        caf_reference_t *refs, int dst_kind, int src_kind, bool may_require_tmp,
+					bool dst_reallocatable, int *stat)
 {
-	
+  caf_token_t_struct *tmp_token = token;
+  size_t i, size;
+  int ierr = 0, j;
+  MPI_Aint addr, offset;
+  MPI_Win *p, *win_addr;
+  int rank = GFC_DESCRIPTOR_RANK (dst);
+  size_t src_size;// = GFC_DESCRIPTOR_SIZE (src);
+  size_t dst_size = GFC_DESCRIPTOR_SIZE (dst);
+  void *t_buff = NULL;
+  bool *buff_map = NULL;
+  void *pad_str = NULL;
+  
+  offset = refs->u.c.offset;
+  win_addr = tmp_token->win_addr;
+  MPI_Get(&addr,1,MPI_UNSIGNED_LONG,image_index-1,0,1,MPI_UNSIGNED_LONG,*win_addr);
+  MPI_Win_flush(image_index-1,*win_addr);
+  p = tmp_token->main_token;
+
+  offset += addr;
+  size = 1;
+  
 }
 
 /* SYNC IMAGES. Note: SYNC IMAGES(*) is passed as count == -1 while

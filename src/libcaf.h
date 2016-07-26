@@ -77,6 +77,7 @@ typedef struct caf_token_t_struct {
   void* main_token;
   void* win_addr;
   void* local_addr;
+  // Do we need length?
 }
 caf_token_t_struct;
 
