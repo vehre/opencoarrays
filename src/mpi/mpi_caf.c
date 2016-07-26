@@ -610,6 +610,22 @@ PREFIX(register_component) (caf_token_t token, caf_register_t type,
 }
 
 void
+PREFIX(deregister_component) (caf_token_t token, int comp_num,
+							  void **component, int *stat,
+							  char *errmsg, int errmsg_len)
+{
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *win_addr;
+  MPI_Aint *local_addr;
+  win_addr = tmp_token->win_addr;
+  local_addr = tmp_token->local_addr;
+  local_addr = NULL;
+  MPI_Win_sync(win_addr);
+  MPI_Win_detach(tmp_token->main_token, *component);
+  free(*component);
+}
+
+void
 PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len)
 {
   /* int ierr; */
@@ -637,16 +653,17 @@ PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len
 
   PREFIX (sync_all) (NULL, NULL, 0);
 
-  caf_static_t *tmp = caf_tot, *prev = caf_tot, *next=caf_tot;
-  MPI_Win *p = *token;
-
-  while(tmp)
+  caf_static_t *tmp = caf_tot, *prev = caf_tot, *next = caf_tot;
+  caf_token_t_struct *tmp_token = token;
+  MPI_Win *p = tmp_token->main_token;
+  
+    while(tmp)
     {
       prev = tmp->prev;
 
-      if(tmp->token == *token)
+      if(tmp->token == tmp_token)
         {
-          p = *token;
+          p = tmp_token->main_token;
 # ifndef CAF_MPI_LOCK_UNLOCK
           MPI_Win_unlock_all(*p);
 # endif // CAF_MPI_LOCK_UNLOCK
@@ -663,17 +680,12 @@ PREFIX (deregister) (caf_token_t *token, int *stat, char *errmsg, int errmsg_len
           free(tmp);
           break;
         }
-
       next = tmp;
       tmp = prev;
     }
 
   if (stat)
     *stat = 0;
-
-  /* if (unlikely (ierr = ARMCI_Free ((*token)[caf_this_image-1]))) */
-  /*   caf_runtime_error ("ARMCI memory freeing failed: Error code %d", ierr); */
-  //gasnet_exit(0);
 
   free (*token);
 }

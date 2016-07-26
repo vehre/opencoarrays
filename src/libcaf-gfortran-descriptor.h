@@ -64,6 +64,7 @@ typedef struct gfc_descriptor_t {
 #define GFC_DESCRIPTOR_RANK(desc) ((desc)->dtype & GFC_DTYPE_RANK_MASK)
 #define GFC_DESCRIPTOR_TYPE(desc) (((desc)->dtype & GFC_DTYPE_TYPE_MASK) \
                                    >> GFC_DTYPE_TYPE_SHIFT)
+#define GFC_DESCRIPTOR_DATA(desc) ((desc)->base_addr)
 #define GFC_DESCRIPTOR_SIZE(desc) ((desc)->dtype >> GFC_DTYPE_SIZE_SHIFT)
 
 #define GFC_DTYPE_SIZE_MASK \
