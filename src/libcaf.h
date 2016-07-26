@@ -73,6 +73,13 @@ typedef enum caf_register_t {
 }
 caf_register_t;
 
+typedef struct caf_token_t_struct {
+  void* main_token;
+  void* win_addr;
+  void* local_addr;
+}
+caf_token_t_struct;
+
 typedef void* caf_token_t;
 
 /* Linked list of static coarrays registered.  */
