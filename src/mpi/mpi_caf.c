@@ -2496,8 +2496,9 @@ PREFIX (event_query) (caf_token_t token, size_t index,
 		      int image_index __attribute__ ((unused)),
 		      int *count, int *stat)
 {
-  int ierr=0, *var = NULL;
+  int ierr=0, *var = NULL, flag = 0, *tmp_var;
   ev_struct *p = token;
+  MPI_Status stat_ev;
   const char msg[] = "Error on event query";
 
   /* if(image_index == 0) */
@@ -2506,7 +2507,18 @@ PREFIX (event_query) (caf_token_t token, size_t index,
   /*   image = image_index-1; */
 
   var = (int *) p->base;
-
+  
+  MPI_Iprobe(MPI_ANY_SOURCE, ev_tag, CAF_COMM_WORLD, &flag, &stat_ev);
+  
+  while(flag)
+  {
+    ierr = MPI_Recv(ev_buf,2,MPI_INT,MPI_ANY_SOURCE,ev_tag,CAF_COMM_WORLD,&stat_ev);
+    tmp_var = (int*)ev_list[ev_buf[0]]->base;
+	tmp_var[ev_buf[1]]++;
+	flag = 0;
+    MPI_Iprobe(MPI_ANY_SOURCE, ev_tag, CAF_COMM_WORLD, &flag, &stat_ev);
+  }
+    
   *count = var[index];
 
   if(stat != NULL)
